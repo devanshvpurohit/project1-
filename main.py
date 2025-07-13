@@ -16,7 +16,7 @@ df = load_data()
 # Convert to numeric, drop NaNs
 df = df.apply(pd.to_numeric, errors='coerce').dropna()
 
-if df.shape[1] < 7:
+if df.shape[1] < 8:
     st.error("CSV must have at least 6 feature columns and 1 target column (7 columns total).")
     st.stop()
 
