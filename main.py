@@ -15,6 +15,7 @@ st.markdown("This app trains a model from a fixed CSV on GitHub, predicts perfor
 
 # Load data from GitHub
 CSV_URL = "https://raw.githubusercontent.com/devanshvpurohit/project1-/main/Student_Performance.csv"
+
 @st.cache_data
 def load_data():
     df = pd.read_csv(CSV_URL)
@@ -29,14 +30,14 @@ feature_names = df.columns[:-1].tolist()
 target_name = df.columns[-1]
 
 # Train linear regression model using normal equation
-def train_model(df):
-    X = df[feature_names].values
-    y = df[target_name].values
+def train_model(X, y):
     X_b = np.c_[np.ones((X.shape[0], 1)), X]
     theta = np.linalg.pinv(X_b.T.dot(X_b)).dot(X_b.T).dot(y)
     return theta
 
-theta = train_model(df)
+X = df[feature_names].values
+y = df[target_name].values
+theta = train_model(X, y)
 intercept = theta[0]
 coefficients = theta[1:]
 
@@ -54,15 +55,15 @@ with st.form("input_form"):
     st.subheader("📥 Input Student Data")
     for feature in feature_names:
         vmin, vmax = float(df[feature].min()), float(df[feature].max())
-        val = st.slider(f"{feature}", min_value=vmin, max_value=vmax, value=(vmin+vmax)/2)
+        val = st.slider(f"{feature}", min_value=vmin, max_value=vmax, value=(vmin + vmax) / 2)
         inputs.append(val)
     submitted = st.form_submit_button("🔮 Predict")
 
-# Prediction function
+# Predict performance based on user inputs
 def predict(inputs):
     return float(np.dot(coefficients, inputs) + intercept)
 
-# Gemini prompt construction
+# Gemini prompt generation
 def prompt_gen(inputs, pred):
     txt = "Student indicators:\n" + "\n".join([f"- {n}: {v}" for n, v in zip(feature_names, inputs)])
     txt += f"\n\nPredicted score: {pred:.2f}.\nGive bullet‑point recommendations to improve academic performance."
@@ -74,37 +75,37 @@ def get_ai_tips(inputs, pred):
     except Exception as e:
         return f"⚠️ Error: {e}"
 
-# When user submits input
+# If form submitted, make prediction and show outputs
 if submitted:
     score = predict(inputs)
     st.subheader("📊 Prediction Result")
     st.metric("Predicted Score", f"{score:.2f}")
-    grade = ("A" if score>=90 else "B" if score>=80 else "C" if score>=70 else "D" if score>=60 else "F")
+    grade = ("A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "F")
     st.write(f"**Estimated Grade:** `{grade}`")
     if score < 60:
         st.error("🚨 This student is at risk—early intervention recommended.")
     else:
         st.success("✅ Performance prediction is satisfactory.")
 
-    # Bar chart of inputs
-    fig1, ax1 = plt.subplots(figsize=(8,4))
+    # Bar chart of input features
+    fig1, ax1 = plt.subplots(figsize=(8, 4))
     bars = ax1.bar(feature_names, inputs, color='skyblue')
     ax1.set_title("Input Feature Values")
     for b in bars:
-        ax1.text(b.get_x()+b.get_width()/2, b.get_height()+0.5, f"{b.get_height():.1f}", ha='center')
+        ax1.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.5, f"{b.get_height():.1f}", ha='center')
     plt.xticks(rotation=15)
     st.pyplot(fig1)
 
-    # Horizontal performance gauge
-    fig2, ax2 = plt.subplots(figsize=(6,1.5))
-    ax2.barh([0], [score], color="green" if score>=60 else "red")
-    ax2.set_xlim(0,100)
+    # Horizontal gauge for score
+    fig2, ax2 = plt.subplots(figsize=(6, 1.5))
+    ax2.barh([0], [score], color="green" if score >= 60 else "red")
+    ax2.set_xlim(0, 100)
     ax2.set_yticks([])
     ax2.set_title("Performance Score")
-    ax2.text(score+2, 0, f"{score:.1f}", va='center')
+    ax2.text(score + 2, 0, f"{score:.1f}", va='center')
     st.pyplot(fig2)
 
-    # AI tips
+    # Get AI recommendations
     with st.spinner("🤖 Generating advice..."):
         advice = get_ai_tips(inputs, score)
     st.subheader("💡 AI Study Tips")
