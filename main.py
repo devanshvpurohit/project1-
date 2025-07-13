@@ -4,9 +4,8 @@ import matplotlib.pyplot as plt
 import google.generativeai as genai
 from sklearn.linear_model import LinearRegression
 
-# Configure Gemini API (hardcoded key)
 genai.configure(api_key="AIzaSyAcfTRSVuhJTPsw4uxChpNWRUfTnxniU_k")
-model = genai.GenerativeModel("gemini-pro")
+model = genai.GenerativeModel(model_name="models/gemini-1.5-pro")
 
 # Streamlit page settings
 st.set_page_config(page_title="🎓 AI Student Performance Predictor", layout="centered")
