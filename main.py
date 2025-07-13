@@ -4,101 +4,103 @@ import matplotlib.pyplot as plt
 import google.generativeai as genai
 from sklearn.linear_model import LinearRegression
 
+# Set up Gemini API key
 genai.configure(api_key="AIzaSyAcfTRSVuhJTPsw4uxChpNWRUfTnxniU_k")
-model = genai.GenerativeModel(model_name="models/gemini-1.5-pro")
+model = genai.GenerativeModel("gemini-pro")
 
-# Streamlit page settings
+# Page settings
 st.set_page_config(page_title="🎓 AI Student Performance Predictor", layout="centered")
 st.title("🎓 AI-Powered Student Performance Predictor")
-st.markdown("Predict academic performance based on study habits, past scores, and behavior. Get AI recommendations to improve outcomes.")
+st.markdown("Predict academic performance and get actionable study tips based on your habits and history.")
 
-# Load data from GitHub
-CSV_URL = "https://raw.githubusercontent.com/devanshvpurohit/project1-/main/Student_Performance.csv"
-
+# Load and preprocess dataset
 @st.cache_data
 def load_data():
-    df = pd.read_csv(CSV_URL)
+    df = pd.read_csv("https://raw.githubusercontent.com/devanshvpurohit/project1-/main/Student_Performance.csv")
     df['Extracurricular Activities'] = df['Extracurricular Activities'].map({'Yes': 1, 'No': 0})
     return df.dropna()
 
 df = load_data()
-st.success(f"✅ Loaded dataset with {df.shape[0]} rows and {df.shape[1]} columns")
+st.success(f"✅ Loaded dataset with {df.shape[0]} records")
 
-# Features and Target
+# Define features
 feature_names = ['Hours Studied', 'Previous Scores', 'Extracurricular Activities', 'Sleep Hours', 'Sample Question Papers Practiced']
 target_name = 'Performance Index'
-X = df[feature_names]
-y = df[target_name]
 
 # Train model
-model_lr = LinearRegression()
-model_lr.fit(X, y)
+X = df[feature_names]
+y = df[target_name]
+model_lr = LinearRegression().fit(X, y)
 coefficients = model_lr.coef_
 intercept = model_lr.intercept_
 
-# Show model equation
-st.subheader("🔬 Trained Model Equation")
+# Show equation
+st.subheader("📈 Model Equation")
 eq = f"{target_name} = " + " + ".join([f"{c:.2f}×{n}" for c, n in zip(coefficients, feature_names)]) + f" + ({intercept:.2f})"
 st.code(eq)
 
-# Show coefficient table
-coef_df = pd.DataFrame({"Feature": feature_names, "Coefficient": coefficients})
-st.dataframe(coef_df)
+# Show coefficients
+st.dataframe(pd.DataFrame({"Feature": feature_names, "Coefficient": coefficients}))
 
-# User inputs
+# Input form
 inputs = []
 with st.form("input_form"):
-    st.subheader("📥 Enter Student Data")
+    st.subheader("📝 Enter Student Data")
     for feature in feature_names:
-        vmin, vmax = float(df[feature].min()), float(df[feature].max())
-        val = st.slider(feature, min_value=vmin, max_value=vmax, value=(vmin + vmax) / 2)
+        min_val = float(df[feature].min())
+        max_val = float(df[feature].max())
+        default_val = float(df[feature].mean())
+        val = st.slider(feature, min_value=min_val, max_value=max_val, value=default_val)
         inputs.append(val)
     submitted = st.form_submit_button("🔮 Predict")
 
-# Predict
+# Predict and display
 if submitted:
     score = model_lr.predict([inputs])[0]
-    st.subheader("📊 Prediction Result")
     st.metric("Predicted Score", f"{score:.2f}")
-    grade = ("A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "F")
-    st.write(f"**Estimated Grade:** `{grade}`")
-    if score < 60:
-        st.error("🚨 This student is at risk—early intervention recommended.")
-    else:
-        st.success("✅ Performance prediction is satisfactory.")
+    grade = "A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "D" if score >= 60 else "F"
+    st.write(f"**Predicted Grade:** `{grade}`")
+    st.warning("⚠️ At-risk student. Recommend early intervention.") if score < 60 else st.success("👍 Performance prediction is positive.")
 
     # Plot input values
-    fig1, ax1 = plt.subplots(figsize=(8, 4))
-    bars = ax1.bar(feature_names, inputs, color='skyblue')
-    ax1.set_title("Input Feature Values")
-    for b in bars:
-        ax1.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.5, f"{b.get_height():.1f}", ha='center')
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.bar(feature_names, inputs, color='skyblue')
+    ax.set_title("Student Input Values")
     plt.xticks(rotation=15)
-    st.pyplot(fig1)
+    st.pyplot(fig)
 
-    # Performance gauge
-    fig2, ax2 = plt.subplots(figsize=(6, 1.5))
-    ax2.barh([0], [score], color="green" if score >= 60 else "red")
-    ax2.set_xlim(0, 100)
-    ax2.set_yticks([])
-    ax2.set_title("Performance Score")
-    ax2.text(score + 2, 0, f"{score:.1f}", va='center')
-    st.pyplot(fig2)
+    # Fallback + AI Recommendations
+    def get_recommendations(inputs, pred_score):
+        tips = []
+        for feature, value in zip(feature_names, inputs):
+            avg = df[feature].mean()
+            if value < avg * 0.8:
+                if "Sample" in feature:
+                    tips.append("📘 Solve more sample question papers.")
+                elif "Sleep" in feature:
+                    tips.append("🛌 Aim for at least 7 hours of sleep.")
+                elif "Hours Studied" in feature:
+                    tips.append("📖 Increase study time.")
+                elif "Previous Scores" in feature:
+                    tips.append("🔁 Revise fundamental concepts.")
+                elif "Extracurricular" in feature:
+                    tips.append("⚖️ Engage in some extracurricular activities for balance.")
 
-    # AI recommendation
-    def get_ai_tips(inputs, pred):
-        prompt = "Student indicators:\n" + "\n".join([f"- {n}: {v}" for n, v in zip(feature_names, inputs)])
-        prompt += f"\n\nPredicted score: {pred:.2f}.\nGive bullet‑point recommendations to improve academic performance."
+        rule_based = "### 📌 Recommendations Based on Data Analysis:\n" + "\n".join(f"- {t}" for t in tips)
+
+        # AI attempt
         try:
-            return model.generate_content(prompt).text
+            prompt = "Student data:\n" + "\n".join([f"- {n}: {v}" for n, v in zip(feature_names, inputs)])
+            prompt += f"\n\nPredicted score: {pred_score:.2f}\nGive personalized academic tips to improve this student's outcome."
+            ai_reply = model.generate_content(prompt).text
+            return f"{ai_reply}\n\n---\n{rule_based}"
         except Exception as e:
-            return f"⚠️ Error: {e}"
+            return f"⚠️ Gemini API unavailable. Default advice:\n\n{rule_based}"
 
-    with st.spinner("🤖 Generating study advice..."):
-        advice = get_ai_tips(inputs, score)
-    st.subheader("💡 AI Recommendations")
-    st.markdown(advice)
+    st.subheader("💡 Study Recommendations")
+    with st.spinner("🤖 Analyzing student profile..."):
+        tips = get_recommendations(inputs, score)
+    st.markdown(tips)
 
 # Footer
 st.markdown("---")
-st.caption("🔐 Built using Scikit-learn + Gemini AI + Streamlit + Matplotlib")
