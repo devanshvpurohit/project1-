@@ -2,12 +2,15 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 
-st.set_page_config(page_title="Linear Regression from Scratch", layout="centered")
+st.set_page_config(page_title="Dynamic Linear Regression Dashboard", layout="centered")
+st.title("📊 Linear Regression Dashboard (NumPy Only)")
 
-st.title("📈 Linear Regression from Scratch (NumPy Only)")
 st.markdown("""
-Upload a CSV file with independent features and one target column (at the end).
-This app calculates the regression coefficients, builds the equation, and reports accuracy using the R² score.
+Upload a CSV with at least **6 feature columns** and **1 target column (last)**.
+This app will:
+- Train a linear regression model from scratch using NumPy
+- Display the learned equation
+- Let you input new values and get predictions based on it
 """)
 
 uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
@@ -15,57 +18,61 @@ uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 def compute_r2(y_true, y_pred):
     ss_res = np.sum((y_true - y_pred) ** 2)
     ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    r2 = 1 - (ss_res / ss_tot)
-    return r2
+    return 1 - (ss_res / ss_tot)
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    st.subheader("🧾 Data Preview")
-    st.dataframe(df.head(), use_container_width=True)
+    # Convert all to numeric and drop bad rows
+    df = df.apply(pd.to_numeric, errors='coerce').dropna()
 
-    if df.shape[1] < 2:
-        st.error("Dataset must have at least one feature column and one target column.")
+    if df.shape[1] < 7:
+        st.error("❌ Please upload a CSV with at least 6 feature columns and 1 target column (min 7 columns total).")
     else:
-        # Assume last column is target
-        X = df.iloc[:, :-1].values
-        y = df.iloc[:, -1].values
+        st.success("✅ Data loaded successfully!")
+
+        st.subheader("🧾 Data Preview")
+        st.dataframe(df.head(), use_container_width=True)
+
         feature_names = df.columns[:-1]
         target_name = df.columns[-1]
 
-        # Add bias (intercept) term
+        X = df.iloc[:, :-1].values
+        y = df.iloc[:, -1].values
+
+        # Add intercept
         X_b = np.c_[np.ones((X.shape[0], 1)), X]
 
-        # Calculate weights using normal equation
+        # Fit model: Normal equation
         theta = np.linalg.inv(X_b.T.dot(X_b)).dot(X_b.T).dot(y)
 
         intercept = theta[0]
         coefficients = theta[1:]
 
-        # Predictions and R² score
+        # Predictions and R²
         y_pred = X_b.dot(theta)
         r2_score = compute_r2(y, y_pred)
 
-        # Display coefficients
-        st.subheader("📊 Regression Coefficients")
-        coef_df = pd.DataFrame({
-            "Feature": ["Intercept"] + list(feature_names),
-            "Coefficient": [intercept] + list(coefficients)
-        })
-        st.dataframe(coef_df, use_container_width=True)
-
-        # Display equation
-        st.subheader("🧮 Regression Equation")
-        equation = f"{target_name} = "
-        equation += " + ".join([f"{coef:.2f} × {name}" for coef, name in zip(coefficients, feature_names)])
-        equation += f" + ({intercept:.2f})"
+        # Display Equation
+        st.subheader("📐 Regression Equation")
+        equation = f"{target_name} = " + " + ".join([
+            f"{coef:.2f} × {name}" for coef, name in zip(coefficients, feature_names)
+        ]) + f" + ({intercept:.2f})"
         st.code(equation)
 
-        # Display accuracy
-        st.subheader("✅ Model Accuracy")
-        st.metric(label="R² Score", value=f"{r2_score * 100:.2f}%")
+        st.subheader("📈 Model Accuracy")
+        st.metric("R² Score", f"{r2_score * 100:.2f}%")
 
-        if r2_score >= 0.9823:
-            st.success("🎉 Excellent! Your model has reached or exceeded 98.23% accuracy.")
-        else:
-            st.warning("📉 Model accuracy is below 98.23%. You might want to explore feature selection or data quality.")
+        # Prediction interface
+        st.subheader("🎯 Predict New Value")
+        st.markdown("Enter feature values below (if unknown, leave as 0):")
+
+        input_values = []
+        for feature in feature_names:
+            val = st.number_input(f"{feature}", value=0.0, format="%.2f")
+            input_values.append(val)
+
+        input_array = np.array([1] + input_values)
+        prediction = input_array.dot(theta)
+
+        st.success(f"🔮 Predicted {target_name}: **{prediction:.2f}**")
