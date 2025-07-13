@@ -6,109 +6,124 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
-# Streamlit page config
-st.set_page_config(page_title="🎓 AI Student Performance Predictor", layout="centered")
-st.title("🎓 AI-Powered Student Performance Predictor")
-st.markdown("Predict academic performance based on academic history, behavior, and engagement metrics. Receive early alerts and personalized tips to improve outcomes.")
+# App config
+st.set_page_config(page_title="🎓 Student Performance Predictor", layout="centered")
+st.title("🎓 AI Student Performance Predictor")
+st.markdown("Predict student academic performance and get personalized improvement recommendations.")
 
-# Load dataset
-CSV_URL = "https://raw.githubusercontent.com/devanshvpurohit/project1-/main/Student_Performance.csv"
-
+# Load and preprocess data
 @st.cache_data
 def load_data():
-    df = pd.read_csv(CSV_URL)
+    url = "https://raw.githubusercontent.com/devanshvpurohit/project1-/main/Student_Performance.csv"
+    df = pd.read_csv(url)
     df['Extracurricular Activities'] = df['Extracurricular Activities'].map({'Yes': 1, 'No': 0})
     df.dropna(inplace=True)
     return df
 
 df = load_data()
-st.success(f"✅ Loaded dataset with {df.shape[0]} records")
+st.success(f"✅ Dataset loaded with {df.shape[0]} records.")
 
-# Feature Engineering
-df['Performance_Label'] = df['Performance Index'].apply(lambda x: 1 if x >= 60 else 0)  # 1 = Pass, 0 = Fail
+# Create binary performance label
+df['Performance_Label'] = df['Performance Index'].apply(lambda x: 1 if x >= 60 else 0)
 
-# Features and labels
-feature_names = ['Hours Studied', 'Previous Scores', 'Extracurricular Activities', 'Sleep Hours', 'Sample Question Papers Practiced']
-target_name = 'Performance_Label'
-X = df[feature_names]
-y = df[target_name]
+# Define features and target
+features = ['Hours Studied', 'Previous Scores', 'Extracurricular Activities', 'Sleep Hours', 'Sample Question Papers Practiced']
+X = df[features]
+y = df['Performance_Label']
 
-# Train/Test split
+# Train/test split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Train model
 model = RandomForestClassifier(n_estimators=100, random_state=42)
 model.fit(X_train, y_train)
 
-# Evaluate model
+# Evaluate
 y_pred = model.predict(X_test)
-acc = accuracy_score(y_test, y_pred)
+accuracy = accuracy_score(y_test, y_pred)
 
-st.subheader("📈 Model Evaluation")
-st.write(f"**Accuracy:** {acc:.2f}")
-st.text("Classification Report:")
-st.code(classification_report(y_test, y_pred))
+st.subheader("📊 Model Evaluation")
+st.metric("Model Accuracy", f"{accuracy * 100:.2f}%")
+st.code(classification_report(y_test, y_pred), language="text")
 
-# User Input
-inputs = []
-with st.form("input_form"):
-    st.subheader("📥 Enter Student Data")
-    for feature in feature_names:
-        vmin, vmax = float(df[feature].min()), float(df[feature].max())
-        val = st.slider(feature, min_value=vmin, max_value=vmax, value=(vmin + vmax) / 2)
-        inputs.append(val)
-    submitted = st.form_submit_button("🔮 Predict")
+# User Input Form
+with st.form("user_input"):
+    st.subheader("🧮 Enter Student Metrics")
+    inputs = []
+    for feature in features:
+        min_val = float(df[feature].min())
+        max_val = float(df[feature].max())
+        default_val = (min_val + max_val) / 2
+        user_val = st.slider(feature, min_value=min_val, max_value=max_val, value=default_val)
+        inputs.append(user_val)
+    submitted = st.form_submit_button("Predict Performance")
 
-# Prediction
+# Predict & Display Results
 if submitted:
-    predicted_label = model.predict([inputs])[0]
-    predicted_proba = model.predict_proba([inputs])[0][1]
+    prediction = model.predict([inputs])[0]
+    confidence = model.predict_proba([inputs])[0][1]
 
-    st.subheader("📊 Prediction Result")
-    status = "Pass" if predicted_label == 1 else "Fail"
-    st.metric("Predicted Outcome", status)
-    st.write(f"**Confidence:** {predicted_proba:.2%}")
+    result = "Pass" if prediction == 1 else "Fail"
+    st.subheader("📈 Prediction Result")
+    st.metric("Prediction", result)
+    st.write(f"Confidence: **{confidence:.2%}**")
 
-    # Risk Warning
-    if predicted_label == 0:
-        st.warning("⚠️ At-risk student. Early support recommended.")
+    if prediction == 0:
+        st.warning("⚠️ At-risk student. Early intervention recommended.")
     else:
-        st.success("👍 Student performance is on track.")
+        st.success("✅ Student is likely on track.")
 
-    # Plot input values
-    fig1, ax1 = plt.subplots(figsize=(8, 4))
-    bars = ax1.bar(feature_names, inputs, color='teal')
+    # Visualize input values
+    fig1, ax1 = plt.subplots()
+    bars = ax1.bar(features, inputs, color='skyblue')
     ax1.set_title("Input Feature Values")
-    for b in bars:
-        ax1.text(b.get_x() + b.get_width() / 2, b.get_height() + 0.5, f"{b.get_height():.1f}", ha='center')
+    ax1.set_ylabel("Value")
+    for bar in bars:
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2, height + 0.3, f"{height:.1f}", ha='center')
     plt.xticks(rotation=15)
     st.pyplot(fig1)
 
     # Confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     fig2, ax2 = plt.subplots()
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Fail', 'Pass'], yticklabels=['Fail', 'Pass'])
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Fail", "Pass"], yticklabels=["Fail", "Pass"])
+    ax2.set_title("Confusion Matrix")
     ax2.set_xlabel("Predicted")
     ax2.set_ylabel("Actual")
-    ax2.set_title("Confusion Matrix")
     st.pyplot(fig2)
 
-    # Recommendations (rule-based)
-    recommendations = []
-    if inputs[feature_names.index("Hours Studied")] < 2:
-        recommendations.append("📚 Increase study time to at least 2 hours daily.")
-    if inputs[feature_names.index("Sleep Hours")] < 6:
-        recommendations.append("😴 Ensure at least 6 hours of sleep for better concentration.")
-    if inputs[feature_names.index("Sample Question Papers Practiced")] < 3:
-        recommendations.append("📝 Practice more sample papers for exam readiness.")
-    if inputs[feature_names.index("Extracurricular Activities")] == 0:
-        recommendations.append("🎯 Engage in extracurriculars for better cognitive balance.")
+    # Recommendations (rule-based with if-else)
+    st.subheader("💡 Recommendations")
+    gave_tips = False
 
-    if recommendations:
-        st.subheader("💡 Recommendations")
-        for tip in recommendations:
-            st.write(tip)
+    if inputs[features.index("Hours Studied")] < 2:
+        st.write("📚 Recommendation: Increase study time to at least 2 hours per day.")
+        gave_tips = True
+    else:
+        st.write("✅ Good amount of study time!")
+
+    if inputs[features.index("Sleep Hours")] < 6:
+        st.write("😴 Recommendation: Sleep at least 6 hours for better focus.")
+        gave_tips = True
+    else:
+        st.write("✅ You're sleeping enough!")
+
+    if inputs[features.index("Sample Question Papers Practiced")] < 3:
+        st.write("📝 Recommendation: Practice more sample papers.")
+        gave_tips = True
+    else:
+        st.write("✅ Well done on practicing sample papers!")
+
+    if inputs[features.index("Extracurricular Activities")] == 0:
+        st.write("🎯 Recommendation: Consider joining extracurricular activities.")
+        gave_tips = True
+    else:
+        st.write("✅ Great to see extracurricular participation!")
+
+    if not gave_tips:
+        st.success("🎉 You're doing great! No major recommendations at this time.")
 
 # Footer
 st.markdown("---")
-st.caption("🔐 Built using Random Forest, Streamlit, Matplotlib, and Seaborn")
+st.caption("🔧 Built with Scikit-learn, Streamlit, Matplotlib, and Seaborn.")
