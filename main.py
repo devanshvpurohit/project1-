@@ -4,17 +4,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import google.generativeai as genai
 
-# 1. Configure Gemini API (hardcoded as requested)
+# Configure Gemini API (hardcoded key)
 genai.configure(api_key="AIzaSyAcfTRSVuhJTPsw4uxChpNWRUfTnxniU_k")
 model = genai.GenerativeModel("gemini-pro")
 
-# 2. App header
+# Streamlit page settings
 st.set_page_config(page_title="🎓 AI Student Performance Predictor", layout="centered")
 st.title("🎓 AI-Powered Student Performance Predictor")
 st.markdown("This app trains a model from a fixed CSV on GitHub, predicts performance, visualizes data, and provides AI-powered recommendations.")
 
-# 3. Load dataset from GitHub
-CSV_URL = "https://github.com/devanshvpurohit/project1-/blob/main/Student_Performance.csv"
+# Load data from GitHub
+CSV_URL = "https://raw.githubusercontent.com/devanshvpurohit/project1-/main/Student_Performance.csv"
 @st.cache_data
 def load_data():
     df = pd.read_csv(CSV_URL)
@@ -24,11 +24,11 @@ def load_data():
 df = load_data()
 st.success(f"✅ Loaded dataset with {df.shape[0]} rows and {df.shape[1]} columns")
 
-# 4. Setup features and target
+# Feature and target extraction
 feature_names = df.columns[:-1].tolist()
 target_name = df.columns[-1]
 
-# 5. Train regression model (Normal Equation)
+# Train linear regression model using normal equation
 def train_model(df):
     X = df[feature_names].values
     y = df[target_name].values
@@ -40,7 +40,7 @@ theta = train_model(df)
 intercept = theta[0]
 coefficients = theta[1:]
 
-# 6. Display trained equation and coefficients
+# Display the equation and coefficients
 st.subheader("🔬 Trained Model Coefficients")
 eq = f"{target_name} = " + " + ".join([f"{c:.2f}×{n}" for c, n in zip(coefficients, feature_names)]) + f" + ({intercept:.2f})"
 st.code(eq)
@@ -48,7 +48,7 @@ st.code(eq)
 coef_df = pd.DataFrame({"Feature": feature_names, "Coefficient": coefficients})
 st.dataframe(coef_df)
 
-# 7. User input form
+# User input form for prediction
 inputs = []
 with st.form("input_form"):
     st.subheader("📥 Input Student Data")
@@ -58,10 +58,11 @@ with st.form("input_form"):
         inputs.append(val)
     submitted = st.form_submit_button("🔮 Predict")
 
-# 8. Prediction logic
+# Prediction function
 def predict(inputs):
     return float(np.dot(coefficients, inputs) + intercept)
 
+# Gemini prompt construction
 def prompt_gen(inputs, pred):
     txt = "Student indicators:\n" + "\n".join([f"- {n}: {v}" for n, v in zip(feature_names, inputs)])
     txt += f"\n\nPredicted score: {pred:.2f}.\nGive bullet‑point recommendations to improve academic performance."
@@ -73,7 +74,7 @@ def get_ai_tips(inputs, pred):
     except Exception as e:
         return f"⚠️ Error: {e}"
 
-# 9. On submission
+# When user submits input
 if submitted:
     score = predict(inputs)
     st.subheader("📊 Prediction Result")
@@ -85,7 +86,7 @@ if submitted:
     else:
         st.success("✅ Performance prediction is satisfactory.")
 
-    # 10. Plot user inputs
+    # Bar chart of inputs
     fig1, ax1 = plt.subplots(figsize=(8,4))
     bars = ax1.bar(feature_names, inputs, color='skyblue')
     ax1.set_title("Input Feature Values")
@@ -94,7 +95,7 @@ if submitted:
     plt.xticks(rotation=15)
     st.pyplot(fig1)
 
-    # 11. Plot prediction gauge
+    # Horizontal performance gauge
     fig2, ax2 = plt.subplots(figsize=(6,1.5))
     ax2.barh([0], [score], color="green" if score>=60 else "red")
     ax2.set_xlim(0,100)
@@ -103,7 +104,7 @@ if submitted:
     ax2.text(score+2, 0, f"{score:.1f}", va='center')
     st.pyplot(fig2)
 
-    # 12. Generate AI Recommendations
+    # AI tips
     with st.spinner("🤖 Generating advice..."):
         advice = get_ai_tips(inputs, score)
     st.subheader("💡 AI Study Tips")
