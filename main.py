@@ -1,71 +1,114 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import google.generativeai as genai
 
-# Set layout
-st.set_page_config(page_title="Student Performance Predictor", layout="centered")
-st.title("🎓 Student Performance Predictor")
+# 1. Configure Gemini API (hardcoded as requested)
+genai.configure(api_key="AIzaSyAcfTRSVuhJTPsw4uxChpNWRUfTnxniU_k")
+model = genai.GenerativeModel("gemini-pro")
 
-# Load local CSV from GitHub repo (same folder)
+# 2. App header
+st.set_page_config(page_title="🎓 AI Student Performance Predictor", layout="centered")
+st.title("🎓 AI-Powered Student Performance Predictor")
+st.markdown("This app trains a model from a fixed CSV on GitHub, predicts performance, visualizes data, and provides AI-powered recommendations.")
+
+# 3. Load dataset from GitHub
+CSV_URL = "https://github.com/devanshvpurohit/project1-/blob/main/Student_Performance.csv"
 @st.cache_data
 def load_data():
-    return pd.read_csv("Student_Performance.csv")
+    df = pd.read_csv(CSV_URL)
+    df = df.apply(pd.to_numeric, errors="coerce").dropna()
+    return df
 
 df = load_data()
+st.success(f"✅ Loaded dataset with {df.shape[0]} rows and {df.shape[1]} columns")
 
-# Convert to numeric, drop NaNs
-df = df.apply(pd.to_numeric, errors='coerce').dropna()
-
-if df.shape[1] < 8:
-    st.error("CSV must have at least 6 feature columns and 1 target column (7 columns total).")
-    st.stop()
-
-st.success("✅ Model trained on hardcoded dataset!")
-
-# Separate features and target
-feature_names = df.columns[:-1]
+# 4. Setup features and target
+feature_names = df.columns[:-1].tolist()
 target_name = df.columns[-1]
 
-X = df.iloc[:, :-1].values
-y = df.iloc[:, -1].values
+# 5. Train regression model (Normal Equation)
+def train_model(df):
+    X = df[feature_names].values
+    y = df[target_name].values
+    X_b = np.c_[np.ones((X.shape[0], 1)), X]
+    theta = np.linalg.pinv(X_b.T.dot(X_b)).dot(X_b.T).dot(y)
+    return theta
 
-# Add bias term
-X_b = np.c_[np.ones((X.shape[0], 1)), X]
-
-# Train linear regression using normal equation
-theta = np.linalg.inv(X_b.T.dot(X_b)).dot(X_b.T).dot(y)
-
+theta = train_model(df)
 intercept = theta[0]
 coefficients = theta[1:]
 
-# Calculate R²
-def compute_r2(y_true, y_pred):
-    ss_res = np.sum((y_true - y_pred) ** 2)
-    ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
-    return 1 - ss_res / ss_tot
+# 6. Display trained equation and coefficients
+st.subheader("🔬 Trained Model Coefficients")
+eq = f"{target_name} = " + " + ".join([f"{c:.2f}×{n}" for c, n in zip(coefficients, feature_names)]) + f" + ({intercept:.2f})"
+st.code(eq)
 
-y_pred = X_b.dot(theta)
-r2_score = compute_r2(y, y_pred)
+coef_df = pd.DataFrame({"Feature": feature_names, "Coefficient": coefficients})
+st.dataframe(coef_df)
 
-# Show regression equation
-st.subheader("📐 Regression Equation")
-equation = f"{target_name} = " + " + ".join([
-    f"{coef:.2f} × {name}" for coef, name in zip(coefficients, feature_names)
-]) + f" + ({intercept:.2f})"
-st.code(equation)
+# 7. User input form
+inputs = []
+with st.form("input_form"):
+    st.subheader("📥 Input Student Data")
+    for feature in feature_names:
+        vmin, vmax = float(df[feature].min()), float(df[feature].max())
+        val = st.slider(f"{feature}", min_value=vmin, max_value=vmax, value=(vmin+vmax)/2)
+        inputs.append(val)
+    submitted = st.form_submit_button("🔮 Predict")
 
-# Show accuracy
-st.subheader("📈 Model Accuracy")
-st.metric("R² Score", f"{r2_score * 100:.2f}%")
+# 8. Prediction logic
+def predict(inputs):
+    return float(np.dot(coefficients, inputs) + intercept)
 
-# Prediction interface
-st.subheader("🧮 Predict New Performance")
-input_values = []
-for feature in feature_names:
-    val = st.number_input(f"{feature}", value=0.0, format="%.2f")
-    input_values.append(val)
+def prompt_gen(inputs, pred):
+    txt = "Student indicators:\n" + "\n".join([f"- {n}: {v}" for n, v in zip(feature_names, inputs)])
+    txt += f"\n\nPredicted score: {pred:.2f}.\nGive bullet‑point recommendations to improve academic performance."
+    return txt
 
-input_array = np.array([1] + input_values)
-prediction = input_array.dot(theta)
+def get_ai_tips(inputs, pred):
+    try:
+        return model.generate_content(prompt_gen(inputs, pred)).text
+    except Exception as e:
+        return f"⚠️ Error: {e}"
 
-st.success(f"🎯 Predicted {target_name}: **{prediction:.2f}**")
+# 9. On submission
+if submitted:
+    score = predict(inputs)
+    st.subheader("📊 Prediction Result")
+    st.metric("Predicted Score", f"{score:.2f}")
+    grade = ("A" if score>=90 else "B" if score>=80 else "C" if score>=70 else "D" if score>=60 else "F")
+    st.write(f"**Estimated Grade:** `{grade}`")
+    if score < 60:
+        st.error("🚨 This student is at risk—early intervention recommended.")
+    else:
+        st.success("✅ Performance prediction is satisfactory.")
+
+    # 10. Plot user inputs
+    fig1, ax1 = plt.subplots(figsize=(8,4))
+    bars = ax1.bar(feature_names, inputs, color='skyblue')
+    ax1.set_title("Input Feature Values")
+    for b in bars:
+        ax1.text(b.get_x()+b.get_width()/2, b.get_height()+0.5, f"{b.get_height():.1f}", ha='center')
+    plt.xticks(rotation=15)
+    st.pyplot(fig1)
+
+    # 11. Plot prediction gauge
+    fig2, ax2 = plt.subplots(figsize=(6,1.5))
+    ax2.barh([0], [score], color="green" if score>=60 else "red")
+    ax2.set_xlim(0,100)
+    ax2.set_yticks([])
+    ax2.set_title("Performance Score")
+    ax2.text(score+2, 0, f"{score:.1f}", va='center')
+    st.pyplot(fig2)
+
+    # 12. Generate AI Recommendations
+    with st.spinner("🤖 Generating advice..."):
+        advice = get_ai_tips(inputs, score)
+    st.subheader("💡 AI Study Tips")
+    st.markdown(advice)
+
+# Footer
+st.markdown("---")
+st.caption("🔐 Built with NumPy + Matplotlib + Google Gemini AI")
